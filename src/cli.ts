@@ -79,7 +79,7 @@ function hasAnyFilter(filters: RollFilters): boolean {
 }
 
 function hashModeLabel(): string {
-  return getHashMode() === 'bun' ? 'bun-compat(wyhash)' : 'fnv-1a'
+  return getHashMode() === 'bun_exact' ? 'bun-exact(bun-hash)' : 'fnv-1a'
 }
 
 function readCompanionHatchedAt(companion: unknown): number | undefined {
@@ -147,19 +147,8 @@ async function executeSwitch(
   process.stdout.write(`${chalk.gray(`新 userID：${result.userId}`)}\n`)
   process.stdout.write(`${chalk.gray(`哈希模式：${hashModeLabel()}`)}\n`)
   process.stdout.write(`${chalk.gray(`配置备份：${mutation.backupPath}`)}\n`)
-  process.stdout.write(`${chalk.gray('companion 已同步：名字/个性/骨架已与新种子对齐')}\n`)
+  process.stdout.write(`${chalk.gray('companion 已同步：仅写入名字/个性（soul），骨架按种子实时推演')}\n`)
   process.stdout.write(`${renderBuddyCard(result.roll.bones)}\n`)
-
-  const runtimeDrift = detectRuntimeDrift({
-    switchTimestamp: record.timestamp,
-    companionHatchedAt: readCompanionHatchedAt(syncedCompanion),
-  })
-  process.stdout.write(`${formatRuntimeDriftStatus(runtimeDrift)}\n`)
-  if (runtimeDrift.status === 'stale_possible') {
-    process.stdout.write(
-      `${chalk.yellow('⚠️ 当前 Claude 左下角宠物可能仍是旧骨架，需重开会话后才会和本次切换一致。')}\n`,
-    )
-  }
 
   if (hasAccountUuid(mutation.config)) {
     process.stdout.write(
@@ -264,19 +253,11 @@ async function main(): Promise<void> {
     .command('card')
     .description('展示当前宠物卡片')
     .action(() => {
-      const state = readState()
       const config = readClaudeConfig()
       const { userId, source } = resolveEffectiveUserId(config)
       const roll = rollByUserId(userId)
       const signature = extractCompanionSignature(config.companion)
-      const runtimeDrift = detectRuntimeDrift({
-        switchTimestamp: state.lastSwitch?.timestamp,
-        companionHatchedAt: readCompanionHatchedAt(config.companion),
-      })
-
-      const signatureRarityZh = signature.rarity ? RARITY_ZH[signature.rarity] : '未知'
-      const signatureSpeciesZh = signature.species ? SPECIES_ZH[signature.species] : '未知'
-      const hasMismatch =
+      const possibleSoulMismatch =
         Boolean(signature.rarity && signature.rarity !== roll.bones.rarity) ||
         Boolean(signature.species && signature.species !== roll.bones.species)
 
@@ -286,29 +267,29 @@ async function main(): Promise<void> {
       process.stdout.write(
         `种子值：${source === 'accountUuid' ? chalk.yellow(userId) : chalk.green(userId)}\n\n`,
       )
-      process.stdout.write(chalk.bold('=== companion（当前配置）===\n'))
+      process.stdout.write(chalk.bold('=== companion（当前配置，soul）===\n'))
       process.stdout.write(`名称：${signature.name ?? '未设置'}\n`)
       process.stdout.write(`解析来源：${signature.source}\n`)
-      process.stdout.write(`稀有度（配置侧）：${signatureRarityZh}\n`)
-      process.stdout.write(`物种（配置侧）：${signatureSpeciesZh}\n`)
       if (signature.personality) {
         process.stdout.write(`个性：${signature.personality}\n`)
+      }
+      if (signature.rarity && signature.species) {
+        process.stdout.write(
+          `个性推断：${RARITY_ZH[signature.rarity]} / ${SPECIES_ZH[signature.species]}（仅供参考）\n`,
+        )
       }
       process.stdout.write('\n')
       process.stdout.write(chalk.bold('=== 种子推演骨架 ===\n'))
       process.stdout.write(`${renderBuddyCard(roll.bones)}\n`)
 
-      if (hasMismatch) {
-        process.stdout.write(`配置一致性：⚠️ 检测到配置 companion 与种子推演不一致，可执行 random/target 重新同步。\n`)
-      } else {
-        process.stdout.write('配置一致性：✅ companion 与种子推演一致。\n')
-      }
-
-      process.stdout.write(`${formatRuntimeDriftStatus(runtimeDrift)}\n`)
-      if (runtimeDrift.status === 'stale_possible') {
+      if (!signature.name || !signature.personality) {
+        process.stdout.write('配置状态：⚠️ 当前 companion soul 不完整，可执行 random/target 重新同步。\n')
+      } else if (possibleSoulMismatch) {
         process.stdout.write(
-          `${chalk.yellow('⚠️ 当前 Claude 左下角宠物可能仍是旧骨架，需重开会话后才会和本次切换一致。')}\n`,
+          '配置状态：⚠️ companion soul 与当前种子推演可能不一致（常见于旧算法遗留），建议执行 random/target 同步。\n',
         )
+      } else {
+        process.stdout.write('配置状态：✅ companion soul 已就绪（骨架以种子推演结果为准）。\n')
       }
     })
 
@@ -354,9 +335,11 @@ async function main(): Promise<void> {
       process.stdout.write(`当前种子来源：${source}\n`)
       process.stdout.write(`当前哈希模式：${hashModeLabel()}\n`)
       process.stdout.write(`${renderDoctorMessage(lock)}\n`)
+      process.stdout.write(chalk.bold('=== 运行态诊断（可选）===\n'))
       process.stdout.write(`${formatRuntimeDriftStatus(runtimeDrift)}\n`)
+      process.stdout.write('说明：该诊断仅用于排查会话状态，不代表映射算法是否正确。\n')
       if (runtimeDrift.status === 'stale_possible') {
-        process.stdout.write('说明：这不是算法映射错误，而是运行中的 Claude 会话尚未热更新到新 userID。\n')
+        process.stdout.write('建议：重开 Claude 会话后再观察左下角宠物展示。\n')
       }
     })
 

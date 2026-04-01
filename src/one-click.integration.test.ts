@@ -13,7 +13,7 @@ afterEach(() => {
 })
 
 describe('one-click script', () => {
-  it('card 命令在 stale_possible 时追加固定告警提示', () => {
+  it('card 命令不再追加热更新固定告警提示', () => {
     const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-script-'))
     tempDirs.push(home)
 
@@ -30,7 +30,8 @@ describe('one-click script', () => {
       encoding: 'utf8',
     })
 
-    expect(output).toContain('运行态一致性：⚠️')
-    expect(output).toContain('检测到运行中 Claude 可能未热更新 userID，建议重开会话。')
+    expect(output).toContain('=== 当前宠物 ===')
+    expect(output).not.toContain('运行态一致性：')
+    expect(output).not.toContain('检测到运行中 Claude 可能未热更新 userID，建议重开会话。')
   })
 })

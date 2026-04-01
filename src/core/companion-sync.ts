@@ -121,17 +121,15 @@ export function extractCompanionSignature(companion: unknown): CompanionSignatur
 export function buildSyncedCompanion(
   userId: string,
   bones: BuddyBones,
-  currentCompanion?: unknown,
+  _currentCompanion?: unknown,
 ): Record<string, unknown> {
-  const base = isObjectRecord(currentCompanion) ? currentCompanion : {}
   // 名称每次跟随物种刷新，避免“名字与当前宠物不匹配”的感知。
   const name = createCompanionName(userId, bones.species)
 
   return {
-    ...base,
+    // 仅持久化 soul，骨架统一由种子实时推演。
     name,
     personality: createCompanionPersonality(bones),
     hatchedAt: Date.now(),
-    ...bones,
   }
 }

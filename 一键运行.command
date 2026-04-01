@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
+export BUDDY_AUTOCLOSE_TERMINAL=1
 
 if [ ! -d "node_modules" ]; then
   echo "[buddy-switch] 首次运行，正在安装依赖..."
@@ -12,13 +13,16 @@ fi
 echo "[buddy-switch] 正在构建..."
 npm run build >/dev/null
 
-print_card_with_runtime_hint() {
-  local card_output
-  card_output="$(node dist/cli.js card)"
-  printf '%s\n' "$card_output"
-  if printf '%s\n' "$card_output" | grep -q '运行态一致性：⚠️'; then
-    echo "检测到运行中 Claude 可能未热更新 userID，建议重开会话。"
+print_card() {
+  node dist/cli.js card
+}
+
+exit_now() {
+  # q 退出时直接结束脚本；.command 场景尝试自动关闭终端窗口。
+  if [ "${BUDDY_AUTOCLOSE_TERMINAL:-0}" = "1" ] && command -v osascript >/dev/null 2>&1; then
+    osascript -e 'tell application "Terminal" to close front window' >/dev/null 2>&1 || true
   fi
+  exit 0
 }
 
 if [ "$#" -eq 0 ]; then
@@ -34,18 +38,17 @@ if [ "$#" -eq 0 ]; then
   node dist/cli.js random
   echo
   echo "========== 4/4 当前宠物卡 =========="
-  print_card_with_runtime_hint
+  print_card
 
   # 交互式终端下支持连续随机抽卡
   if [ -t 0 ]; then
     while true; do
       echo
-      printf "\033[36m输入 q 退出\033[0m，\033[1;33m回车继续抽卡\033[0m: "
+      printf "\033[37m输入 q 退出\033[0m，\033[1;33m回车继续抽卡\033[0m: "
       read -r answer
       case "$answer" in
         q|Q|quit|QUIT|exit|EXIT)
-          echo "[buddy-switch] 抽卡结束，欢迎下次再来。"
-          break
+          exit_now
           ;;
         *)
           echo
@@ -53,7 +56,7 @@ if [ "$#" -eq 0 ]; then
           node dist/cli.js random
           echo
           echo "========== 当前宠物卡 =========="
-          print_card_with_runtime_hint
+          print_card
           ;;
       esac
     done
@@ -61,7 +64,7 @@ if [ "$#" -eq 0 ]; then
 else
   echo "[buddy-switch] 执行：$*"
   if [ "$1" = "card" ]; then
-    print_card_with_runtime_hint
+    print_card
   else
     node dist/cli.js "$@"
   fi

@@ -15,7 +15,7 @@ describe('companion-sync', () => {
     expect(signature.species).toBe('blob')
   })
 
-  it('构建同步 companion 会写入骨架字段', () => {
+  it('构建同步 companion 仅写入 soul，并清理旧 bones 字段', () => {
     const userId = 'sync-user-001'
     const { bones } = rollByUserId(userId)
 
@@ -23,18 +23,32 @@ describe('companion-sync', () => {
       name: 'OldBuddy',
       personality: 'A common blob of few words.',
       hatchedAt: 1,
+      rarity: 'legendary',
+      species: 'dragon',
+      eye: '✦',
+      hat: 'wizard',
+      shiny: true,
+      stats: {
+        DEBUGGING: 100,
+        PATIENCE: 100,
+        CHAOS: 100,
+        WISDOM: 100,
+        SNARK: 100,
+      },
     })
 
     expect(synced.name).not.toBe('OldBuddy')
     expect(typeof synced.name).toBe('string')
     expect((synced.name as string).length).toBeGreaterThan(3)
-    expect(synced.rarity).toBe(bones.rarity)
-    expect(synced.species).toBe(bones.species)
-    expect(synced.eye).toBe(bones.eye)
-    expect(synced.hat).toBe(bones.hat)
-    expect(synced.stats).toEqual(bones.stats)
+    expect(synced.rarity).toBeUndefined()
+    expect(synced.species).toBeUndefined()
+    expect(synced.eye).toBeUndefined()
+    expect(synced.hat).toBeUndefined()
+    expect(synced.shiny).toBeUndefined()
+    expect(synced.stats).toBeUndefined()
     expect(typeof synced.personality).toBe('string')
     expect((synced.personality as string).toLowerCase()).toContain(bones.rarity)
     expect((synced.personality as string).toLowerCase()).toContain(bones.species)
+    expect(Object.keys(synced).sort()).toEqual(['hatchedAt', 'name', 'personality'])
   })
 })

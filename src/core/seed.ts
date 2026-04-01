@@ -1,12 +1,16 @@
-import { wyhash_str } from 'wyhash'
+import { hash as bunWyhash } from 'bun-wyhash'
 
-export type HashMode = 'bun' | 'fnv'
+export type HashMode = 'bun_exact' | 'fnv'
 
-// 兼容 Bun.hash：内部是 wyhash64，这里取低 32 位。
-export function hashStringBunCompat(input: string): number {
-  const hash64 = wyhash_str(input, 0n)
+// 精确兼容 Bun.hash：取 64 位哈希的低 32 位。
+export function hashStringBunExact(input: string): number {
+  // bun-wyhash 的类型声明是 number，但实际返回 bigint（与 Bun.hash 对齐）。
+  const hash64 = bunWyhash(input) as unknown as bigint
   return Number(BigInt.asUintN(32, hash64))
 }
+
+// 向后兼容旧函数名（避免调用方一次性改动过大）。
+export const hashStringBunCompat = hashStringBunExact
 
 // FNV-1a 32 位哈希（兼容回退模式）
 export function hashStringFNV1a(input: string): number {
@@ -19,8 +23,12 @@ export function hashStringFNV1a(input: string): number {
 }
 
 function resolveHashMode(): HashMode {
-  const raw = (process.env.BUDDY_HASH_MODE ?? 'bun').trim().toLowerCase()
-  return raw === 'fnv' ? 'fnv' : 'bun'
+  const raw = (process.env.BUDDY_HASH_MODE ?? 'bun_exact').trim().toLowerCase()
+  if (raw === 'fnv') {
+    return 'fnv'
+  }
+  // 兼容旧值 `bun`，统一归一到 `bun_exact`
+  return 'bun_exact'
 }
 
 export function getHashMode(): HashMode {
@@ -31,7 +39,7 @@ export function hashString(input: string, mode = resolveHashMode()): number {
   if (mode === 'fnv') {
     return hashStringFNV1a(input)
   }
-  return hashStringBunCompat(input)
+  return hashStringBunExact(input)
 }
 
 // Mulberry32 伪随机数生成器
