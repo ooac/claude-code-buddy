@@ -253,11 +253,16 @@ save_backup() {
   fi
 }
 
+colorize_backup_indexes() {
+  printf "%s\\n" "$1" | sed -E $'s/\\[1\\]/[\\033[1;33m1\\033[0m]/g; s/\\[2\\]/[\\033[1;33m2\\033[0m]/g; s/\\[3\\]/[\\033[1;33m3\\033[0m]/g; s/\\[4\\]/[\\033[1;33m4\\033[0m]/g; s/\\[5\\]/[\\033[1;33m5\\033[0m]/g'
+}
+
 backup_browser_mode() {
   while true; do
     echo
     backup_list_output="$(run_cli backup list)"
-    printf "%s\n" "$backup_list_output"
+    colorized_backup_list_output="$(colorize_backup_indexes "$backup_list_output")"
+    printf "%s\\n" "$colorized_backup_list_output"
     printf "\\033[37mInput q to return\\033[0m, \\033[1;33minput 1-5 to restore\\033[0m: "
     read -r backup_action
     case "$backup_action" in

@@ -323,3 +323,17 @@
 - `scripts/package-portable.mjs`
 - `README.md`
 - `src/one-click.integration.test.ts`
+
+## 任务 #1.19：备份子界面序号高亮（`[1]~[5]` 黄色） ✅
+**状态**：已完成
+**时间**：2026-04-02 00:10 - 2026-04-02 00:12
+**执行者**：LD
+
+### 实现结果
+- ✅ `one-click.sh` 在备份子界面新增显示层着色：`[1]~[5]` 数字以黄色输出
+- ✅ 保留原始列表文本用于序号存在性校验，避免影响恢复逻辑
+- ✅ 便携包模板 `scripts/package-portable.mjs` 的 mac 启动器同步同样高亮策略，保证迁移包一致体验
+
+### 相关文件
+- `one-click.sh`
+- `scripts/package-portable.mjs`

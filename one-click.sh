@@ -54,12 +54,17 @@ list_backups() {
   node dist/cli.js backup list
 }
 
+colorize_backup_indexes() {
+  printf "%s\n" "$1" | sed -E $'s/\\[1\\]/[\\033[1;33m1\\033[0m]/g; s/\\[2\\]/[\\033[1;33m2\\033[0m]/g; s/\\[3\\]/[\\033[1;33m3\\033[0m]/g; s/\\[4\\]/[\\033[1;33m4\\033[0m]/g; s/\\[5\\]/[\\033[1;33m5\\033[0m]/g'
+}
+
 backup_browser_mode() {
   while true; do
     echo
     echo "========== 宠物备份列表 =========="
     backup_list_output="$(list_backups)"
-    printf "%s\n" "$backup_list_output"
+    colorized_backup_list_output="$(colorize_backup_indexes "$backup_list_output")"
+    printf "%s\n" "$colorized_backup_list_output"
     printf "\033[37m输入 q 返回主模式\033[0m，\033[1;33m输入 1~5 恢复备份\033[0m: "
     read -r backup_action
     case "$backup_action" in
