@@ -13,6 +13,24 @@ afterEach(() => {
 })
 
 describe('one-click script', () => {
+  it('无参数启动默认进入待机，不会自动抽卡', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-script-'))
+    tempDirs.push(home)
+
+    const output = execFileSync('bash', ['./one-click.sh'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        HOME: home,
+      },
+      encoding: 'utf8',
+    })
+
+    expect(output).toContain('已进入待机模式')
+    expect(output).toContain('非交互模式')
+    expect(output).not.toContain('切换完成')
+  })
+
   it('card 命令不再追加热更新固定告警提示', () => {
     const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-script-'))
     tempDirs.push(home)

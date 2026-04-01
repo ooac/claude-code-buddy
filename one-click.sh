@@ -54,14 +54,31 @@ list_backups() {
   node dist/cli.js backup list
 }
 
-restore_backup_by_id() {
-  printf "请输入要恢复的备份 ID: "
-  read -r backup_id
-  if [ -z "${backup_id:-}" ]; then
-    echo "[buddy-switch] 备份 ID 不能为空。"
-    return
-  fi
-  node dist/cli.js backup restore --id "$backup_id"
+backup_browser_mode() {
+  while true; do
+    echo
+    echo "========== 宠物备份列表 =========="
+    backup_list_output="$(list_backups)"
+    printf "%s\n" "$backup_list_output"
+    printf "\033[37m输入 q 返回主模式\033[0m，\033[1;33m输入 1~5 恢复备份\033[0m: "
+    read -r backup_action
+    case "$backup_action" in
+      q|Q|quit|QUIT|exit|EXIT)
+        return
+        ;;
+      [1-5])
+        if ! printf "%s\n" "$backup_list_output" | grep -Fq -- "- [${backup_action}] ID:"; then
+          echo "[buddy-switch] 当前列表中没有序号 ${backup_action}，请重新选择。"
+          continue
+        fi
+        node dist/cli.js backup restore --index "$backup_action"
+        return
+        ;;
+      *)
+        echo "[buddy-switch] 仅支持输入 1~5 或 q。"
+        ;;
+    esac
+  done
 }
 
 exit_now() {
@@ -73,28 +90,25 @@ exit_now() {
 }
 
 if [ "$#" -eq 0 ]; then
-  echo "[buddy-switch] 未提供参数，执行计划版一键流程：doctor -> prob -> random -> card"
-  echo
-  echo "========== 1/4 环境诊断 =========="
-  node dist/cli.js doctor
-  echo
-  echo "========== 2/4 概率面板 =========="
-  node dist/cli.js prob
-  echo
-  echo "========== 3/4 一键孵化（热血模式） =========="
-  node dist/cli.js random
-  echo
-  echo "========== 4/4 当前宠物卡 =========="
-  print_card
+  echo "[buddy-switch] 已进入待机模式：默认不会自动抽卡。"
+  echo "[buddy-switch] 操作提示：回车抽卡，输入 b 备份，输入 c 查看/恢复备份，输入 q 退出。"
 
-  # 交互式终端下支持连续随机抽卡
+  # 交互式终端下支持按需抽卡
   if [ -t 0 ]; then
     while true; do
       echo
-      printf "\033[1;36m快捷键：b 备份当前 | l 查看备份 | r 按ID恢复\033[0m\n"
+      printf "\033[1;36m快捷键：b 备份当前 | c 查看/恢复备份\033[0m\n"
       printf "\033[37m输入 q 退出\033[0m，\033[1;33m回车继续抽卡\033[0m: "
       read -r answer
       case "$answer" in
+        '')
+          echo
+          echo "========== 再来一抽（热血模式） =========="
+          node dist/cli.js random
+          echo
+          echo "========== 当前宠物卡 =========="
+          print_card
+          ;;
         q|Q|quit|QUIT|exit|EXIT)
           exit_now
           ;;
@@ -103,26 +117,16 @@ if [ "$#" -eq 0 ]; then
           echo "========== 备份当前宠物 =========="
           save_backup
           ;;
-        l|L|list|LIST)
-          echo
-          echo "========== 宠物备份列表 =========="
-          list_backups
-          ;;
-        r|R|restore|RESTORE)
-          echo
-          echo "========== 按ID恢复宠物 =========="
-          restore_backup_by_id
+        c|C|check|CHECK|list|LIST)
+          backup_browser_mode
           ;;
         *)
-          echo
-          echo "========== 再来一抽（热血模式） =========="
-          node dist/cli.js random
-          echo
-          echo "========== 当前宠物卡 =========="
-          print_card
+          echo "[buddy-switch] 不支持该输入。请直接回车抽卡，或输入 b / c / q。"
           ;;
       esac
     done
+  else
+    echo "[buddy-switch] 当前为非交互模式，默认不执行抽卡。可传入命令参数直接执行，例如：./one-click.sh random"
   fi
 else
   echo "[buddy-switch] 执行：$*"

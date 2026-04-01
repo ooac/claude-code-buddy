@@ -145,30 +145,28 @@ set "CLI_JS=%ROOT_DIR%app\\dist\\cli.js"
 
 if not "%~1"=="" goto run_args
 
-echo [buddy-switch] Running default flow: doctor ^> prob ^> random ^> card
+echo [buddy-switch] Standby mode: no auto draw on startup.
+echo [buddy-switch] Tips: press Enter to draw, input b to backup, input c to browse/restore, input q to exit.
 echo.
-"%NODE_EXE%" "%CLI_JS%" doctor
-echo.
-"%NODE_EXE%" "%CLI_JS%" prob
-echo.
-"%NODE_EXE%" "%CLI_JS%" random
-echo.
-"%NODE_EXE%" "%CLI_JS%" card
 
 :loop
 echo.
-echo Shortcuts: b save backup ^| l list backups ^| r restore by ID
+echo Shortcuts: b save backup ^| c browse/restore backups
 set /p ANSWER=Input q to exit, press Enter to draw again: 
+if "%ANSWER%"=="" goto draw_random
 if /I "%ANSWER%"=="q" goto finish
 if /I "%ANSWER%"=="quit" goto finish
 if /I "%ANSWER%"=="exit" goto finish
 if /I "%ANSWER%"=="b" goto backup_save
 if /I "%ANSWER%"=="backup" goto backup_save
-if /I "%ANSWER%"=="l" goto backup_list
-if /I "%ANSWER%"=="list" goto backup_list
-if /I "%ANSWER%"=="r" goto backup_restore
-if /I "%ANSWER%"=="restore" goto backup_restore
+if /I "%ANSWER%"=="c" goto backup_browser_mode
+if /I "%ANSWER%"=="check" goto backup_browser_mode
+if /I "%ANSWER%"=="list" goto backup_browser_mode
 
+echo [buddy-switch] Unsupported input. Press Enter to draw, or input b/c/q.
+goto loop
+
+:draw_random
 echo.
 "%NODE_EXE%" "%CLI_JS%" random
 echo.
@@ -185,19 +183,31 @@ if "%BACKUP_NAME%"=="" (
 )
 goto loop
 
-:backup_list
+:backup_browser_mode
+:backup_browser_loop
 echo.
-"%NODE_EXE%" "%CLI_JS%" backup list
-goto loop
-
-:backup_restore
-echo.
-set /p BACKUP_ID=Input backup ID to restore: 
-if "%BACKUP_ID%"=="" (
-  echo [buddy-switch] backup ID is required.
+set "BUDDY_LIST_TMP=%TEMP%\\buddy-switch-backup-list-%RANDOM%-%RANDOM%.txt"
+"%NODE_EXE%" "%CLI_JS%" backup list > "%BUDDY_LIST_TMP%"
+type "%BUDDY_LIST_TMP%"
+set /p BACKUP_ACTION=Input q to return, or 1-5 to restore: 
+if /I "%BACKUP_ACTION%"=="q" (
+  del /q "%BUDDY_LIST_TMP%" >nul 2>&1
   goto loop
 )
-"%NODE_EXE%" "%CLI_JS%" backup restore --id "%BACKUP_ID%"
+echo %BACKUP_ACTION%| findstr /r "^[1-5]$" >nul
+if errorlevel 1 (
+  echo [buddy-switch] only supports 1-5 or q.
+  del /q "%BUDDY_LIST_TMP%" >nul 2>&1
+  goto backup_browser_loop
+)
+findstr /c:"- [%BACKUP_ACTION%] ID:" "%BUDDY_LIST_TMP%" >nul
+if errorlevel 1 (
+  echo [buddy-switch] backup index %BACKUP_ACTION% is not in the current list.
+  del /q "%BUDDY_LIST_TMP%" >nul 2>&1
+  goto backup_browser_loop
+)
+del /q "%BUDDY_LIST_TMP%" >nul 2>&1
+"%NODE_EXE%" "%CLI_JS%" backup restore --index "%BACKUP_ACTION%"
 goto loop
 
 :run_args
@@ -236,41 +246,56 @@ run_cli() {
 save_backup() {
   printf "Backup name (optional): "
   read -r backup_name
-  if [ -n "${backup_name:-}" ]; then
+  if [ -n "$backup_name" ]; then
     run_cli backup save --name "$backup_name"
   else
     run_cli backup save
   fi
 }
 
-restore_backup_by_id() {
-  printf "Input backup ID to restore: "
-  read -r backup_id
-  if [ -z "${backup_id:-}" ]; then
-    echo "[buddy-switch] backup ID is required."
-    return
-  fi
-  run_cli backup restore --id "$backup_id"
+backup_browser_mode() {
+  while true; do
+    echo
+    backup_list_output="$(run_cli backup list)"
+    printf "%s\n" "$backup_list_output"
+    printf "\\033[37mInput q to return\\033[0m, \\033[1;33minput 1-5 to restore\\033[0m: "
+    read -r backup_action
+    case "$backup_action" in
+      q|Q|quit|QUIT|exit|EXIT)
+        return
+        ;;
+      [1-5])
+        if ! printf "%s\n" "$backup_list_output" | grep -Fq -- "- [$backup_action] ID:"; then
+          echo "[buddy-switch] backup index $backup_action is not in the current list."
+          continue
+        fi
+        run_cli backup restore --index "$backup_action"
+        return
+        ;;
+      *)
+        echo "[buddy-switch] only supports 1-5 or q."
+        ;;
+    esac
+  done
 }
 
 if [ "$#" -eq 0 ]; then
-  echo "[buddy-switch] Running default flow: doctor -> prob -> random -> card"
-  echo
-  run_cli doctor
-  echo
-  run_cli prob
-  echo
-  run_cli random
-  echo
-  run_cli card
+  echo "[buddy-switch] Standby mode: no auto draw on startup."
+  echo "[buddy-switch] Tips: press Enter to draw, input b to backup, input c to browse/restore, input q to exit."
 
   if [ -t 0 ]; then
     while true; do
       echo
-      printf "\\033[1;36mShortcuts: b save backup | l list backups | r restore by ID\\033[0m\\n"
+      printf "\\033[1;36mShortcuts: b save backup | c browse/restore backups\\033[0m\\n"
       printf "\\033[37mInput q to exit\\033[0m, \\033[1;33mpress Enter to draw again\\033[0m: "
       read -r answer
       case "$answer" in
+        '')
+          echo
+          run_cli random
+          echo
+          run_cli card
+          ;;
         q|Q|quit|QUIT|exit|EXIT)
           exit 0
           ;;
@@ -278,22 +303,16 @@ if [ "$#" -eq 0 ]; then
           echo
           save_backup
           ;;
-        l|L|list|LIST)
-          echo
-          run_cli backup list
-          ;;
-        r|R|restore|RESTORE)
-          echo
-          restore_backup_by_id
+        c|C|check|CHECK|list|LIST)
+          backup_browser_mode
           ;;
         *)
-          echo
-          run_cli random
-          echo
-          run_cli card
+          echo "[buddy-switch] Unsupported input. Press Enter to draw, or input b/c/q."
           ;;
       esac
     done
+  else
+    echo "[buddy-switch] Non-interactive mode detected; no auto draw. Pass arguments to run command directly, e.g. ./run-mac.command random"
   fi
 else
   run_cli "$@"

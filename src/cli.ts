@@ -60,7 +60,8 @@ type BackupSaveOptions = {
 }
 
 type BackupRestoreOptions = {
-  id: string
+  id?: string
+  index?: string
 }
 
 function msg(zh: string, en: string): string {
@@ -111,6 +112,21 @@ function parsePositiveInt(input: string): number {
   const value = Number.parseInt(input, 10)
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error(msg('max-attempts 必须是正整数', 'max-attempts must be a positive integer'))
+  }
+  return value
+}
+
+function parseBackupIndex(input?: string): number | undefined {
+  if (typeof input !== 'string') {
+    return undefined
+  }
+  const trimmed = input.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const value = Number.parseInt(trimmed, 10)
+  if (!Number.isFinite(value) || value < 1 || value > 5) {
+    throw new Error(msg('恢复序号必须是 1~5 的整数', 'restore index must be an integer from 1 to 5'))
   }
   return value
 }
@@ -447,8 +463,8 @@ async function main(): Promise<void> {
         return
       }
 
-      for (const item of backups) {
-        process.stdout.write(`- ID: ${item.id}\n`)
+      for (const [index, item] of backups.entries()) {
+        process.stdout.write(`- [${index + 1}] ID: ${item.id}\n`)
         process.stdout.write(`  ${msg('时间', 'Time')}: ${item.createdAt}\n`)
         process.stdout.write(`  ${msg('名称', 'Name')}: ${item.name ?? msg('未命名', 'unnamed')}\n`)
         process.stdout.write(`  ${msg('物种', 'Species')}: ${pickText(SPECIES_ZH[item.summary.species], item.summary.species)}\n`)
@@ -461,17 +477,27 @@ async function main(): Promise<void> {
 
   backupCommand
     .command('restore')
-    .description(msg('按备份 ID 恢复宠物', 'restore pet by backup ID'))
-    .requiredOption('--id <backupId>', msg('备份 ID', 'backup id'))
+    .description(msg('按备份序号或 ID 恢复宠物', 'restore pet by backup index or ID'))
+    .option('--index <n>', msg('备份序号（1~5）', 'backup index (1~5)'))
+    .option('--id <backupId>', msg('备份 ID（兼容模式）', 'backup id (legacy compatible)'))
     .action(async function (options: BackupRestoreOptions) {
       const paths = getResolvedPaths(this.optsWithGlobals() as GlobalCliOptions)
       const state = readState(paths.statePath)
-      const backupId = options.id.trim()
-      if (!backupId) {
-        throw new Error(msg('备份 ID 不能为空', 'backup id cannot be empty'))
+      const backups = state.petBackups
+      const backupIndex = parseBackupIndex(options.index)
+      const backupId = typeof options.id === 'string' ? options.id.trim() : ''
+
+      if (!backupIndex && !backupId) {
+        throw new Error(msg('请提供 --index（推荐）或 --id', 'please provide --index (recommended) or --id'))
       }
-      const target = state.petBackups.find(item => item.id === backupId)
+      let target = typeof backupIndex === 'number' ? backups[backupIndex - 1] : undefined
+      if (!target && backupId) {
+        target = backups.find(item => item.id === backupId)
+      }
       if (!target) {
+        if (backupIndex) {
+          throw new Error(msg(`找不到序号 ${backupIndex} 对应的备份`, `backup index not found: ${backupIndex}`))
+        }
         throw new Error(msg(`找不到备份 ID：${backupId}`, `backup id not found: ${backupId}`))
       }
       if (!existsSync(target.snapshotPath)) {
@@ -504,6 +530,9 @@ async function main(): Promise<void> {
       )
 
       process.stdout.write(`${chalk.green(msg(`${pickIcon('✅ ', '')}已恢复到备份宠物`, '[OK] restored to pet backup'))}\n`)
+      if (backupIndex) {
+        process.stdout.write(`${msg('恢复序号', 'Restore index')}: ${backupIndex}\n`)
+      }
       process.stdout.write(`${msg('备份 ID', 'Backup ID')}: ${target.id}\n`)
       process.stdout.write(`${msg('恢复来源', 'Restored from')}: ${target.snapshotPath}\n`)
       if (!undoBackupPath) {

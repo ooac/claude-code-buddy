@@ -78,6 +78,7 @@ describe('cli integration', () => {
       ['--config-path', customConfigPath, '--state-path', customStatePath, 'backup', 'list'],
       home,
     )
+    expect(listOutput).toContain('- [1] ID:')
     expect(listOutput).toContain(`ID: ${backupId}`)
     expect(listOutput).toContain('物种')
     expect(listOutput).toContain('稀有度')
@@ -87,10 +88,11 @@ describe('cli integration', () => {
     expect(changedConfigRaw).not.toEqual(savedConfigRaw)
 
     const restoreOutput = runCli(
-      ['--config-path', customConfigPath, '--state-path', customStatePath, 'backup', 'restore', '--id', backupId],
+      ['--config-path', customConfigPath, '--state-path', customStatePath, 'backup', 'restore', '--index', '1'],
       home,
     )
     expect(restoreOutput).toContain('已恢复到备份宠物')
+    expect(restoreOutput).toContain('恢复序号')
     expect(restoreOutput).toContain('非交互环境')
     const restoredConfigRaw = readFileSync(customConfigPath, 'utf8')
     expect(restoredConfigRaw).toEqual(savedConfigRaw)
@@ -109,7 +111,7 @@ describe('cli integration', () => {
     }
 
     const listOutput = runCli(['backup', 'list'], home)
-    const idLines = listOutput.match(/- ID:/g) ?? []
+    const idLines = listOutput.match(/- \[\d\] ID:/g) ?? []
     expect(idLines).toHaveLength(5)
 
     const backupDir = join(home, '.buddy-switch', 'backups')
@@ -126,6 +128,17 @@ describe('cli integration', () => {
 
     const stderr = runCliExpectFail(['backup', 'restore', '--id', 'not-exist-id'], home)
     expect(stderr).toContain('找不到备份 ID')
+  })
+
+  it('backup restore 在序号无效时给出明确错误', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
+    tempDirs.push(home)
+
+    const configPath = join(home, '.claude.json')
+    writeFileSync(configPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    const stderr = runCliExpectFail(['backup', 'restore', '--index', '9'], home)
+    expect(stderr).toContain('恢复序号必须是 1~5 的整数')
   })
 
   it('backup restore 在快照文件缺失时给出明确错误', () => {

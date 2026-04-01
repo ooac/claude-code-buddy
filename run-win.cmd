@@ -16,30 +16,28 @@ if exist "%ROOT_DIR%app\dist\cli.js" set "CLI_JS=%ROOT_DIR%app\dist\cli.js"
 
 if not "%~1"=="" goto run_args
 
-echo [buddy-switch] Running default flow: doctor ^> prob ^> random ^> card
+echo [buddy-switch] Standby mode: no auto draw on startup.
+echo [buddy-switch] Tips: press Enter to draw, input b to backup, input c to browse/restore, input q to exit.
 echo.
-"%NODE_EXE%" "%CLI_JS%" doctor
-echo.
-"%NODE_EXE%" "%CLI_JS%" prob
-echo.
-"%NODE_EXE%" "%CLI_JS%" random
-echo.
-"%NODE_EXE%" "%CLI_JS%" card
 
 :loop
 echo.
-echo Shortcuts: b save backup ^| l list backups ^| r restore by ID
+echo Shortcuts: b save backup ^| c browse/restore backups
 set /p ANSWER=Input q to exit, press Enter to draw again: 
+if "%ANSWER%"=="" goto draw_random
 if /I "%ANSWER%"=="q" goto finish
 if /I "%ANSWER%"=="quit" goto finish
 if /I "%ANSWER%"=="exit" goto finish
 if /I "%ANSWER%"=="b" goto backup_save
 if /I "%ANSWER%"=="backup" goto backup_save
-if /I "%ANSWER%"=="l" goto backup_list
-if /I "%ANSWER%"=="list" goto backup_list
-if /I "%ANSWER%"=="r" goto backup_restore
-if /I "%ANSWER%"=="restore" goto backup_restore
+if /I "%ANSWER%"=="c" goto backup_browser_mode
+if /I "%ANSWER%"=="check" goto backup_browser_mode
+if /I "%ANSWER%"=="list" goto backup_browser_mode
 
+echo [buddy-switch] Unsupported input. Press Enter to draw, or input b/c/q.
+goto loop
+
+:draw_random
 echo.
 "%NODE_EXE%" "%CLI_JS%" random
 echo.
@@ -56,19 +54,31 @@ if "%BACKUP_NAME%"=="" (
 )
 goto loop
 
-:backup_list
+:backup_browser_mode
+:backup_browser_loop
 echo.
-"%NODE_EXE%" "%CLI_JS%" backup list
-goto loop
-
-:backup_restore
-echo.
-set /p BACKUP_ID=Input backup ID to restore: 
-if "%BACKUP_ID%"=="" (
-  echo [buddy-switch] backup ID is required.
+set "BUDDY_LIST_TMP=%TEMP%\buddy-switch-backup-list-%RANDOM%-%RANDOM%.txt"
+"%NODE_EXE%" "%CLI_JS%" backup list > "%BUDDY_LIST_TMP%"
+type "%BUDDY_LIST_TMP%"
+set /p BACKUP_ACTION=Input q to return, or 1-5 to restore: 
+if /I "%BACKUP_ACTION%"=="q" (
+  del /q "%BUDDY_LIST_TMP%" >nul 2>&1
   goto loop
 )
-"%NODE_EXE%" "%CLI_JS%" backup restore --id "%BACKUP_ID%"
+echo %BACKUP_ACTION%| findstr /r "^[1-5]$" >nul
+if errorlevel 1 (
+  echo [buddy-switch] only supports 1-5 or q.
+  del /q "%BUDDY_LIST_TMP%" >nul 2>&1
+  goto backup_browser_loop
+)
+findstr /c:"- [%BACKUP_ACTION%] ID:" "%BUDDY_LIST_TMP%" >nul
+if errorlevel 1 (
+  echo [buddy-switch] backup index %BACKUP_ACTION% is not in the current list.
+  del /q "%BUDDY_LIST_TMP%" >nul 2>&1
+  goto backup_browser_loop
+)
+del /q "%BUDDY_LIST_TMP%" >nul 2>&1
+"%NODE_EXE%" "%CLI_JS%" backup restore --index "%BACKUP_ACTION%"
 goto loop
 
 :run_args

@@ -261,3 +261,65 @@
 - `README.md`
 - `package.json`
 - `src/one-click.integration.test.ts`
+
+## 任务 #1.16：备份交互简化（c查看 + 序号恢复1~5） ✅
+**状态**：已完成
+**时间**：2026-04-01 23:30 - 2026-04-01 23:40
+**执行者**：LD
+
+### 实现结果
+- ✅ 一键交互将“查看备份”快捷键从 `l` 改为 `c`，避免与数字 `1` 视觉混淆
+- ✅ 恢复逻辑改为按序号（`1~5`）恢复，不再依赖手输长 ID
+- ✅ CLI `backup restore` 新增 `--index <1~5>`（推荐），保留 `--id` 兼容
+- ✅ `backup list` 增加序号展示（`[1]...[5]`）
+- ✅ 同步更新 Win 脚本与便携包模板，保证分发后行为一致
+- ✅ 补充集成测试覆盖序号恢复和无效序号错误分支
+
+### 相关文件
+- `src/cli.ts`
+- `src/cli.integration.test.ts`
+- `one-click.sh`
+- `run-win.cmd`
+- `scripts/package-portable.mjs`
+- `README.md`
+
+## 任务 #1.17：一键脚本恢复流程重构（`c` 子界面统一查看与按序号恢复） ✅
+**状态**：已完成
+**时间**：2026-04-01 23:45 - 2026-04-01 23:57
+**执行者**：LD
+
+### 实现结果
+- ✅ 主模式移除 `r` 快捷键，只保留 `b / c / q / 回车`
+- ✅ `c` 进入备份子界面：每轮先显示备份列表，再仅接受 `1~5` 恢复或 `q` 返回主模式
+- ✅ 增加“序号存在性”校验：当当前列表无该序号时，给出明确提示并留在子界面
+- ✅ 恢复成功后自动返回主模式，避免再走二次路径
+- ✅ `run-win.cmd` 与 `scripts/package-portable.mjs` 生成模板同步同逻辑，消除源码与分发行为偏差
+- ✅ 修复 `scripts/package-portable.mjs` 模板中的未转义 `${}` 语法问题，恢复 `pack:portable` 可执行性
+- ✅ 更新 README 一键交互说明，明确恢复仅在 `c` 子界面执行
+- ✅ 全量回归通过：`npm run build && npm test`（39/39）
+
+### 相关文件
+- `one-click.sh`
+- `run-win.cmd`
+- `scripts/package-portable.mjs`
+- `README.md`
+
+## 任务 #1.18：一键启动待机化（默认不抽卡，回车才抽卡） ✅
+**状态**：已完成
+**时间**：2026-04-02 00:00 - 2026-04-02 00:06
+**执行者**：LD
+
+### 实现结果
+- ✅ `one-click.sh` 无参数启动改为待机模式，不再自动执行 `doctor/prob/random/card`
+- ✅ 主循环改为“仅回车抽卡”；其余输入中仅 `b/c/q` 生效，非法输入仅提示不触发抽卡
+- ✅ `run-win.cmd` 同步为待机启动，且仅在回车时执行 `random + card`
+- ✅ 便携包模板（`scripts/package-portable.mjs`）中 Win/Mac 启动器同步同逻辑，避免分发行为偏差
+- ✅ README 更新为“默认待机、回车抽卡”语义
+- ✅ 新增一键脚本集成测试：验证无参数启动不会自动抽卡
+
+### 相关文件
+- `one-click.sh`
+- `run-win.cmd`
+- `scripts/package-portable.mjs`
+- `README.md`
+- `src/one-click.integration.test.ts`

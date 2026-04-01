@@ -52,7 +52,10 @@ node dist/cli.js backup save --name "我的收藏1"
 # 列出备份池（ID / 时间 / 物种 / 稀有度 / 闪光 / userID 摘要）
 node dist/cli.js backup list
 
-# 按备份 ID 恢复到某只宠物
+# 按备份序号（1~5）恢复到某只宠物（推荐）
+node dist/cli.js backup restore --index 1
+
+# 兼容模式：按备份 ID 恢复
 node dist/cli.js backup restore --id pet-abc123
 
 # 诊断
@@ -88,13 +91,13 @@ buddy-switch --config-path "D:\Claude Data\my.claude.json" --state-path "D:\Clau
 - Windows：`run-win.cmd`（双击可运行）
 - 通用脚本（当前仓库）：`one-click.sh`
 
-默认流程：`doctor -> prob -> random -> card`，随后支持连抽：
+默认行为：进入待机模式，不会自动抽卡；按回车才会执行抽卡并展示宠物卡：
 
 - 输入 `q` 退出
 - 回车继续抽卡
 - 输入 `b` 立即备份当前宠物（支持输入备份名称）
-- 输入 `l` 查看宠物备份列表
-- 输入 `r` 按备份 ID 恢复宠物
+- 输入 `c` 进入备份子界面（先查看列表，再按 `1~5` 序号恢复）
+- 在 `c` 子界面输入 `q` 返回主模式（不退出程序）
 
 ## 分发（双轨）
 
