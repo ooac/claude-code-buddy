@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -39,6 +39,48 @@ afterEach(() => {
 })
 
 describe('cli integration', () => {
+  it('支持 --config-path / --state-path 显式覆盖，并兼容空格与中文路径', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
+    tempDirs.push(home)
+
+    const customBase = join(home, '配置 空格', '二级目录')
+    mkdirSync(customBase, { recursive: true })
+    const customConfigPath = join(customBase, 'buddy 配置.json')
+    const customStatePath = join(customBase, '状态目录', 'state.json')
+    writeFileSync(customConfigPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    const output = runCli(
+      [
+        '--config-path',
+        customConfigPath,
+        '--state-path',
+        customStatePath,
+        'random',
+        '--no-hype',
+      ],
+      home,
+    )
+    expect(output).toContain('切换完成')
+    expect(existsSync(customStatePath)).toBe(true)
+    expect(existsSync(join(home, '.claude.json'))).toBe(false)
+
+    const customConfigAfter = readFileSync(customConfigPath, 'utf8')
+    expect(customConfigAfter).toContain('"userID"')
+  })
+
+  it('ASCII 模式下输出自动降级为英文无 Emoji', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
+    tempDirs.push(home)
+
+    const configPath = join(home, '.claude.json')
+    writeFileSync(configPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    const output = runCli(['random', '--no-hype'], home, { BUDDY_FORCE_ASCII: '1' })
+    expect(output).toContain('[OK] Switch completed')
+    expect(output).not.toContain('切换完成')
+    expect(output).not.toContain('✅')
+  })
+
   it('random -> target -> undo 流程可用', () => {
     const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
     tempDirs.push(home)

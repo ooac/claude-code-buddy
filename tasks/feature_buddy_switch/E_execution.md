@@ -188,3 +188,30 @@
 - `one-click.sh`
 - `一键运行.command`
 - `README.md`
+
+## 任务 #1.13：跨平台可迁移分发（Win x64 + Mac arm64 + UTF-8 防乱码） ✅
+**状态**：已完成
+**时间**：2026-04-01 20:30 - 2026-04-01 20:55
+**执行者**：LD
+
+### 实现结果
+- ✅ 新增双轨分发脚本：`npm pack` + 便携包（`release/buddy-switch-win-x64.zip`、`release/buddy-switch-macos-arm64.zip`）
+- ✅ 新增 `scripts/package-portable.mjs`：自动下载平台 Node Runtime，组装 `runtime/ + app/ + ASCII 启动器`
+- ✅ 新增 Windows 启动器 `buddy-switch.cmd`、`run-win.cmd`：启动时 `chcp 65001`，失败自动设置 `BUDDY_FORCE_ASCII=1`
+- ✅ 新增 macOS ASCII 启动器 `run-mac.command`，保留回车续抽与 `q` 退出
+- ✅ CLI 补齐路径覆盖能力：`--config-path / --state-path` 与 `BUDDY_CONFIG_PATH / BUDDY_STATE_PATH`
+- ✅ 增加路径优先级与 ASCII 降级测试，覆盖空格/中文路径与无 Emoji 输出分支
+- ✅ 补齐 GitHub Actions 发布工作流（Win/Mac 产物 + npm 包上传）
+
+### 相关文件
+- `scripts/package-portable.mjs`
+- `run-mac.command`
+- `run-win.cmd`
+- `buddy-switch.cmd`
+- `package.json`
+- `.github/workflows/release.yml`
+- `src/io/path-options.ts`
+- `src/io/path-options.test.ts`
+- `src/cli.integration.test.ts`
+- `src/io/runtime-drift.ts`
+- `README.md`

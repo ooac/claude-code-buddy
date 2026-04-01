@@ -22,6 +22,18 @@ type ClaudeProcessInfo = {
 
 const FORCE_ENV = 'BUDDY_RUNTIME_DRIFT_FORCE'
 
+function isAsciiMode(): boolean {
+  return process.env.BUDDY_FORCE_ASCII === '1'
+}
+
+function pickText(zh: string, en: string): string {
+  return isAsciiMode() ? en : zh
+}
+
+function pickIcon(icon: string, fallback = ''): string {
+  return isAsciiMode() ? fallback : icon
+}
+
 function parseDateToMs(value: string): number | undefined {
   const ms = Date.parse(value)
   return Number.isFinite(ms) ? ms : undefined
@@ -193,14 +205,26 @@ export function detectRuntimeDrift(options?: {
 export function formatRuntimeDriftStatus(result: RuntimeDriftResult): string {
   if (result.status === 'safe') {
     if (result.reason === 'no_switch_time') {
-      return '运行态一致性：✅ 无切换基准，当前无法发现运行态漂移。'
+      return pickText(
+        `运行态一致性：${pickIcon('✅ ', '[OK] ')}无切换基准，当前无法发现运行态漂移。`,
+        'Runtime consistency: [OK] no switch baseline; no drift signal now.',
+      )
     }
-    return '运行态一致性：✅ 未发现运行态漂移。'
+    return pickText(
+      `运行态一致性：${pickIcon('✅ ', '[OK] ')}未发现运行态漂移。`,
+      'Runtime consistency: [OK] no drift detected.',
+    )
   }
 
   if (result.status === 'no_claude_process') {
-    return '运行态一致性：ℹ️ 未检测到运行中的 Claude 进程。'
+    return pickText(
+      `运行态一致性：${pickIcon('ℹ️ ', '[INFO] ')}未检测到运行中的 Claude 进程。`,
+      'Runtime consistency: [INFO] no running Claude process detected.',
+    )
   }
 
-  return '运行态一致性：⚠️ 检测到运行中 Claude 可能未热更新 userID，建议重开会话。'
+  return pickText(
+    `运行态一致性：${pickIcon('⚠️ ', '[WARN] ')}检测到运行中 Claude 可能未热更新 userID，建议重开会话。`,
+    'Runtime consistency: [WARN] possible stale session; reopen Claude and check again.',
+  )
 }

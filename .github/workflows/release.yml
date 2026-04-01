@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  portable-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test
+      - run: npm run pack:portable
+        env:
+          BUDDY_PORTABLE_TARGETS: win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: buddy-switch-win-x64
+          path: release/buddy-switch-win-x64.zip
+
+  portable-mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test
+      - run: npm run pack:portable
+        env:
+          BUDDY_PORTABLE_TARGETS: macos-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: buddy-switch-macos-arm64
+          path: release/buddy-switch-macos-arm64.zip
+
+  npm-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run pack:npm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: buddy-switch-npm-package
+          path: '*.tgz'
+
+  release-assets:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [portable-win, portable-mac, npm-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/buddy-switch-win-x64/buddy-switch-win-x64.zip
+            release-assets/buddy-switch-macos-arm64/buddy-switch-macos-arm64.zip
+            release-assets/buddy-switch-npm-package/*.tgz
+          generate_release_notes: true
