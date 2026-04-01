@@ -1,0 +1,29 @@
+{
+  "name": "buddy-switch",
+  "version": "0.1.0",
+  "description": "Buddy 一键切换 CLI 插件（含稀有度概率与情绪化孵化反馈）",
+  "type": "module",
+  "bin": {
+    "buddy-switch": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^14.0.0",
+    "wyhash": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
