@@ -4,9 +4,31 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
-if [ ! -d "node_modules" ]; then
+NPM_LOCAL_CACHE="$ROOT_DIR/.buddy-switch-cache/npm"
+mkdir -p "$NPM_LOCAL_CACHE"
+export npm_config_cache="$NPM_LOCAL_CACHE"
+export npm_config_update_notifier=false
+export npm_config_fund=false
+export npm_config_audit=false
+
+install_dependencies() {
   echo "[buddy-switch] 首次运行，正在安装依赖..."
-  npm install
+
+  local install_cmd=(npm install --no-audit --no-fund)
+  if [ -f "package-lock.json" ]; then
+    install_cmd=(npm ci --no-audit --no-fund)
+  fi
+
+  if ! "${install_cmd[@]}"; then
+    echo "[buddy-switch] 依赖安装失败，正在清理本地 npm 缓存后重试..."
+    npm cache clean --force >/dev/null 2>&1 || true
+    rm -rf node_modules
+    "${install_cmd[@]}"
+  fi
+}
+
+if [ ! -d "node_modules" ] || [ ! -f "node_modules/chalk/package.json" ]; then
+  install_dependencies
 fi
 
 if [ ! -f "dist/cli.js" ] || [ "${BUDDY_FORCE_REBUILD:-0}" = "1" ]; then

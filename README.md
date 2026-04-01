@@ -157,3 +157,9 @@ BUDDY_PORTABLE_TARGETS=macos-arm64 npm run pack:portable
 - `backup restore` 在交互终端会先询问是否为“当前配置”创建保护备份（`y/N`）；非交互环境默认跳过并提示。
 - `card` 以“种子推演骨架 + companion soul”展示。
 - `doctor` 提供 accountUuid 与运行态诊断，不自动重启 Claude 进程。
+
+## 常见问题
+
+- macOS 首次运行若遇到 `npm ERR! EEXIST / EACCES`（缓存重命名失败）：
+  - 新版一键脚本会自动使用项目内本地缓存目录 `.buddy-switch-cache/npm`，避免依赖全局 `~/.npm` 权限。
+  - 如仍失败，可删除项目下 `.buddy-switch-cache` 与 `node_modules` 后重试。
