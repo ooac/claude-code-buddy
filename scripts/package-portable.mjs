@@ -254,7 +254,15 @@ save_backup() {
 }
 
 colorize_backup_indexes() {
-  printf "%s\\n" "$1" | sed -E $'s/\\[1\\]/[\\033[1;33m1\\033[0m]/g; s/\\[2\\]/[\\033[1;33m2\\033[0m]/g; s/\\[3\\]/[\\033[1;33m3\\033[0m]/g; s/\\[4\\]/[\\033[1;33m4\\033[0m]/g; s/\\[5\\]/[\\033[1;33m5\\033[0m]/g'
+  local text="$1"
+  local yellow=$'\\033[1;33m'
+  local reset=$'\\033[0m'
+  text="\${text//\\[1\\]/[\${yellow}1\${reset}]}"
+  text="\${text//\\[2\\]/[\${yellow}2\${reset}]}"
+  text="\${text//\\[3\\]/[\${yellow}3\${reset}]}"
+  text="\${text//\\[4\\]/[\${yellow}4\${reset}]}"
+  text="\${text//\\[5\\]/[\${yellow}5\${reset}]}"
+  printf "%s\\n" "$text"
 }
 
 backup_browser_mode() {
