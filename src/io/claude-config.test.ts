@@ -3,6 +3,7 @@ import os from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  backupCurrentConfigToPath,
   readClaudeConfig,
   restoreConfigFromBackup,
   switchUserIdWithBackup,
@@ -74,5 +75,22 @@ describe('claude-config', () => {
       rarity: 'rare',
       species: 'cat',
     })
+  })
+
+  it('可按指定路径保存完整配置快照', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-test-'))
+    tempDirs.push(home)
+
+    const configPath = join(home, '.claude.json')
+    const snapshotPath = join(home, 'snapshots', 'full.json')
+    writeFileSync(
+      configPath,
+      JSON.stringify({ userID: 'u-1', custom: { keep: true }, rawText: 'abc' }, null, 2),
+    )
+
+    backupCurrentConfigToPath(configPath, snapshotPath)
+    const snapshotRaw = readFileSync(snapshotPath, 'utf8')
+    expect(snapshotRaw).toContain('"custom"')
+    expect(snapshotRaw).toContain('"rawText"')
   })
 })

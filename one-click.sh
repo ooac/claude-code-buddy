@@ -9,11 +9,37 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
-echo "[buddy-switch] 正在构建..."
-npm run build >/dev/null
+if [ ! -f "dist/cli.js" ] || [ "${BUDDY_FORCE_REBUILD:-0}" = "1" ]; then
+  echo "[buddy-switch] 正在构建..."
+  npm run build >/dev/null
+fi
 
 print_card() {
   node dist/cli.js card
+}
+
+save_backup() {
+  printf "备份名称（可空，回车默认）: "
+  read -r backup_name
+  if [ -n "${backup_name:-}" ]; then
+    node dist/cli.js backup save --name "$backup_name"
+  else
+    node dist/cli.js backup save
+  fi
+}
+
+list_backups() {
+  node dist/cli.js backup list
+}
+
+restore_backup_by_id() {
+  printf "请输入要恢复的备份 ID: "
+  read -r backup_id
+  if [ -z "${backup_id:-}" ]; then
+    echo "[buddy-switch] 备份 ID 不能为空。"
+    return
+  fi
+  node dist/cli.js backup restore --id "$backup_id"
 }
 
 exit_now() {
@@ -43,11 +69,26 @@ if [ "$#" -eq 0 ]; then
   if [ -t 0 ]; then
     while true; do
       echo
-      printf "\033[37m输入 q 退出\033[0m，\033[1;33m回车继续抽卡\033[0m: "
+      printf "\033[37m输入 q 退出\033[0m，\033[1;33m回车继续抽卡\033[0m，\033[1;36mb 备份当前\033[0m，\033[1;34ml 查看备份\033[0m，\033[1;35mr 按ID恢复\033[0m: "
       read -r answer
       case "$answer" in
         q|Q|quit|QUIT|exit|EXIT)
           exit_now
+          ;;
+        b|B|backup|BACKUP)
+          echo
+          echo "========== 备份当前宠物 =========="
+          save_backup
+          ;;
+        l|L|list|LIST)
+          echo
+          echo "========== 宠物备份列表 =========="
+          list_backups
+          ;;
+        r|R|restore|RESTORE)
+          echo
+          echo "========== 按ID恢复宠物 =========="
+          restore_backup_by_id
           ;;
         *)
           echo

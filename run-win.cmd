@@ -28,15 +28,46 @@ echo.
 
 :loop
 echo.
-set /p ANSWER=Input q to exit, press Enter to draw again: 
+set /p ANSWER=Input q to exit, press Enter to draw again, b save backup, l list backups, r restore by ID: 
 if /I "%ANSWER%"=="q" goto finish
 if /I "%ANSWER%"=="quit" goto finish
 if /I "%ANSWER%"=="exit" goto finish
+if /I "%ANSWER%"=="b" goto backup_save
+if /I "%ANSWER%"=="backup" goto backup_save
+if /I "%ANSWER%"=="l" goto backup_list
+if /I "%ANSWER%"=="list" goto backup_list
+if /I "%ANSWER%"=="r" goto backup_restore
+if /I "%ANSWER%"=="restore" goto backup_restore
 
 echo.
 "%NODE_EXE%" "%CLI_JS%" random
 echo.
 "%NODE_EXE%" "%CLI_JS%" card
+goto loop
+
+:backup_save
+echo.
+set /p BACKUP_NAME=Backup name (optional, press Enter to skip): 
+if "%BACKUP_NAME%"=="" (
+  "%NODE_EXE%" "%CLI_JS%" backup save
+) else (
+  "%NODE_EXE%" "%CLI_JS%" backup save --name "%BACKUP_NAME%"
+)
+goto loop
+
+:backup_list
+echo.
+"%NODE_EXE%" "%CLI_JS%" backup list
+goto loop
+
+:backup_restore
+echo.
+set /p BACKUP_ID=Input backup ID to restore: 
+if "%BACKUP_ID%"=="" (
+  echo [buddy-switch] backup ID is required.
+  goto loop
+)
+"%NODE_EXE%" "%CLI_JS%" backup restore --id "%BACKUP_ID%"
 goto loop
 
 :run_args

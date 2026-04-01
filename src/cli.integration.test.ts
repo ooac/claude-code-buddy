@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -32,6 +32,19 @@ function runCli(args: string[], home: string, extraEnv?: Record<string, string>)
   })
 }
 
+function runCliExpectFail(args: string[], home: string, extraEnv?: Record<string, string>): string {
+  try {
+    runCli(args, home, extraEnv)
+    throw new Error('expected command to fail')
+  } catch (error) {
+    const stderr = (error as { stderr?: string }).stderr
+    if (typeof stderr === 'string') {
+      return stderr
+    }
+    return String(error)
+  }
+}
+
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
@@ -39,6 +52,107 @@ afterEach(() => {
 })
 
 describe('cli integration', () => {
+  it('backup save -> list -> restore 全链路可用（含自定义路径）', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
+    tempDirs.push(home)
+
+    const customBase = join(home, '配置 空格', '备份目录')
+    mkdirSync(customBase, { recursive: true })
+    const customConfigPath = join(customBase, 'buddy 配置.json')
+    const customStatePath = join(customBase, 'state dir', 'state.json')
+    writeFileSync(customConfigPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    runCli(['--config-path', customConfigPath, '--state-path', customStatePath, 'random', '--no-hype'], home)
+    const savedConfigRaw = readFileSync(customConfigPath, 'utf8')
+
+    const saveOutput = runCli(
+      ['--config-path', customConfigPath, '--state-path', customStatePath, 'backup', 'save', '--name', '收藏1'],
+      home,
+    )
+    expect(saveOutput).toContain('宠物备份成功')
+    const idMatch = saveOutput.match(/备份 ID:\s*(\S+)/)
+    expect(idMatch?.[1]).toBeTruthy()
+    const backupId = idMatch?.[1] ?? ''
+
+    const listOutput = runCli(
+      ['--config-path', customConfigPath, '--state-path', customStatePath, 'backup', 'list'],
+      home,
+    )
+    expect(listOutput).toContain(`ID: ${backupId}`)
+    expect(listOutput).toContain('物种')
+    expect(listOutput).toContain('稀有度')
+
+    runCli(['--config-path', customConfigPath, '--state-path', customStatePath, 'random', '--no-hype'], home)
+    const changedConfigRaw = readFileSync(customConfigPath, 'utf8')
+    expect(changedConfigRaw).not.toEqual(savedConfigRaw)
+
+    const restoreOutput = runCli(
+      ['--config-path', customConfigPath, '--state-path', customStatePath, 'backup', 'restore', '--id', backupId],
+      home,
+    )
+    expect(restoreOutput).toContain('已恢复到备份宠物')
+    expect(restoreOutput).toContain('非交互环境')
+    const restoredConfigRaw = readFileSync(customConfigPath, 'utf8')
+    expect(restoredConfigRaw).toEqual(savedConfigRaw)
+  })
+
+  it('backup 备份池严格最多 5 条并淘汰最旧快照', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
+    tempDirs.push(home)
+
+    const configPath = join(home, '.claude.json')
+    writeFileSync(configPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    for (let i = 0; i < 6; i++) {
+      runCli(['random', '--no-hype'], home)
+      runCli(['backup', 'save', '--name', `slot-${i}`], home)
+    }
+
+    const listOutput = runCli(['backup', 'list'], home)
+    const idLines = listOutput.match(/- ID:/g) ?? []
+    expect(idLines).toHaveLength(5)
+
+    const backupDir = join(home, '.buddy-switch', 'backups')
+    const snapshotFiles = readdirSync(backupDir).filter(name => name.endsWith('.json'))
+    expect(snapshotFiles).toHaveLength(5)
+  })
+
+  it('backup restore 在 ID 不存在时给出明确错误', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
+    tempDirs.push(home)
+
+    const configPath = join(home, '.claude.json')
+    writeFileSync(configPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    const stderr = runCliExpectFail(['backup', 'restore', '--id', 'not-exist-id'], home)
+    expect(stderr).toContain('找不到备份 ID')
+  })
+
+  it('backup restore 在快照文件缺失时给出明确错误', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
+    tempDirs.push(home)
+
+    const configPath = join(home, '.claude.json')
+    writeFileSync(configPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    runCli(['random', '--no-hype'], home)
+    const saveOutput = runCli(['backup', 'save', '--name', 'slot-x'], home)
+    const idMatch = saveOutput.match(/备份 ID:\s*(\S+)/)
+    const backupId = idMatch?.[1] ?? ''
+    expect(backupId).not.toBe('')
+
+    const statePath = join(home, '.buddy-switch', 'state.json')
+    const state = JSON.parse(readFileSync(statePath, 'utf8')) as {
+      petBackups?: Array<{ id?: string; snapshotPath?: string }>
+    }
+    const snapshotPath = state.petBackups?.find(item => item.id === backupId)?.snapshotPath
+    expect(typeof snapshotPath).toBe('string')
+    rmSync(snapshotPath ?? '', { force: true })
+
+    const stderr = runCliExpectFail(['backup', 'restore', '--id', backupId], home)
+    expect(stderr).toContain('备份快照不存在')
+  })
+
   it('支持 --config-path / --state-path 显式覆盖，并兼容空格与中文路径', () => {
     const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-cli-'))
     tempDirs.push(home)

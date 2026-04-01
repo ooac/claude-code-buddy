@@ -9,6 +9,7 @@ Buddy 一键切换 CLI 插件（稀有度概率 + 热血孵化反馈）。
 - 概率面板：`prob`
 - 当前宠物卡：`card`
 - 一键回滚：`undo`
+- 手动宠物备份池：`backup save/list/restore`
 - 诊断模式：`doctor`
 - companion 同步策略：仅持久化 soul（`name/personality/hatchedAt`）
 - 哈希默认分支：`bun-exact(bun-wyhash)`（可用 `BUDDY_HASH_MODE=fnv` 回退）
@@ -44,6 +45,15 @@ node dist/cli.js card
 
 # 回滚
 node dist/cli.js undo
+
+# 手动备份当前宠物（完整配置快照）
+node dist/cli.js backup save --name "我的收藏1"
+
+# 列出备份池（ID / 时间 / 物种 / 稀有度 / 闪光 / userID 摘要）
+node dist/cli.js backup list
+
+# 按备份 ID 恢复到某只宠物
+node dist/cli.js backup restore --id pet-abc123
 
 # 诊断
 node dist/cli.js doctor
@@ -82,6 +92,9 @@ buddy-switch --config-path "D:\Claude Data\my.claude.json" --state-path "D:\Clau
 
 - 输入 `q` 退出
 - 回车继续抽卡
+- 输入 `b` 立即备份当前宠物（支持输入备份名称）
+- 输入 `l` 查看宠物备份列表
+- 输入 `r` 按备份 ID 恢复宠物
 
 ## 分发（双轨）
 
@@ -139,5 +152,8 @@ BUDDY_PORTABLE_TARGETS=macos-arm64 npm run pack:portable
 
 - 默认读写 `~/.claude.json` 与 `~/.buddy-switch/state.json`。
 - 切换前自动备份配置：`~/.claude.json.buddy-switch.<timestamp>.bak`。
+- 手动备份池仅在执行 `backup save` 时写入（不会在每次抽卡自动入库）。
+- 备份池最多保留 5 条；新增第 6 条时会自动淘汰最旧一条并清理其快照文件。
+- `backup restore` 在交互终端会先询问是否为“当前配置”创建保护备份（`y/N`）；非交互环境默认跳过并提示。
 - `card` 以“种子推演骨架 + companion soul”展示。
 - `doctor` 提供 accountUuid 与运行态诊断，不自动重启 Claude 进程。

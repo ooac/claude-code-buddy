@@ -34,4 +34,24 @@ describe('one-click script', () => {
     expect(output).not.toContain('运行态一致性：')
     expect(output).not.toContain('检测到运行中 Claude 可能未热更新 userID，建议重开会话。')
   })
+
+  it('支持透传 backup list 命令', () => {
+    const home = mkdtempSync(join(os.tmpdir(), 'buddy-switch-script-'))
+    tempDirs.push(home)
+
+    const configPath = join(home, '.claude.json')
+    writeFileSync(configPath, JSON.stringify({ hasCompletedOnboarding: true }, null, 2))
+
+    const output = execFileSync('bash', ['./one-click.sh', 'backup', 'list'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        HOME: home,
+      },
+      encoding: 'utf8',
+    })
+
+    expect(output).toContain('宠物备份列表')
+    expect(output).toContain('当前没有宠物备份')
+  })
 })

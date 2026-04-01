@@ -215,3 +215,49 @@
 - `src/cli.integration.test.ts`
 - `src/io/runtime-drift.ts`
 - `README.md`
+
+## 任务 #1.14：手动宠物备份池（save/list/restore + 5条轮转） ✅
+**状态**：已完成
+**时间**：2026-04-01 22:10 - 2026-04-01 22:25
+**执行者**：LD
+
+### 实现结果
+- ✅ 新增 `backup` 命令组：`backup save`、`backup list`、`backup restore --id`
+- ✅ 备份内容为完整配置快照（非仅宠物字段），并落盘到 `statePath` 同级 `backups/` 目录
+- ✅ 备份池新增 `petBackups` 元数据，最多保留 5 条；超限自动淘汰最旧并清理快照文件
+- ✅ `backup restore` 支持按 ID 恢复，非交互环境默认跳过保护备份并输出提示
+- ✅ 交互环境支持 `y/N` 确认是否先做“当前配置保护备份”
+- ✅ 恢复完成后立即输出当前宠物卡，减少二次确认成本
+- ✅ 补齐单元测试与集成测试（含中文/空格路径、轮转、错误分支）
+
+### 相关文件
+- `src/cli.ts`
+- `src/io/state.ts`
+- `src/io/restore-confirm.ts`
+- `src/io/restore-confirm.test.ts`
+- `src/io/state.test.ts`
+- `src/io/claude-config.ts`
+- `src/io/claude-config.test.ts`
+- `src/cli.integration.test.ts`
+- `README.md`
+
+## 任务 #1.15：一键交互菜单补齐备份入口（b/l/r） ✅
+**状态**：已完成
+**时间**：2026-04-01 22:40 - 2026-04-01 22:50
+**执行者**：LD
+
+### 实现结果
+- ✅ `one-click.sh` 新增交互快捷项：`b` 备份、`l` 列表、`r` 按ID恢复（保留 `q` 退出与回车抽卡）
+- ✅ `run-win.cmd` 同步新增备份交互入口，保持 Win/Mac 体验一致
+- ✅ 便携包模板（`scripts/package-portable.mjs`）同步菜单，避免分发后功能缩水
+- ✅ README 一键交互说明补齐备份相关提示
+- ✅ 修复并行测试构建竞态：恢复 `build` 为非清空模式，仅便携打包时清理 `dist`
+- ✅ 新增 `one-click` 透传 `backup list` 集成测试并通过
+
+### 相关文件
+- `one-click.sh`
+- `run-win.cmd`
+- `scripts/package-portable.mjs`
+- `README.md`
+- `package.json`
+- `src/one-click.integration.test.ts`

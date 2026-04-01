@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { isAbsolute, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { Command } from 'commander'
 import chalk from 'chalk'
 import {
@@ -18,6 +19,7 @@ import {
 import { getHashMode } from './core/seed.js'
 import { RARITIES, RARITY_ZH, SPECIES, SPECIES_ZH, type RollFilters, type Rarity, type Species } from './core/types.js'
 import {
+  backupCurrentConfigToPath,
   backupCurrentConfigForUndo,
   hasAccountUuid,
   readClaudeConfig,
@@ -26,8 +28,16 @@ import {
   switchUserIdWithBackup,
 } from './io/claude-config.js'
 import { resolvePathOptions, type ResolvedPathOptions } from './io/path-options.js'
+import { confirmSafetyBackup } from './io/restore-confirm.js'
 import { detectRuntimeDrift, formatRuntimeDriftStatus } from './io/runtime-drift.js'
-import { markUndo, readState, updateStateAfterSwitch } from './io/state.js'
+import {
+  appendPetBackup,
+  getPetBackupDirectory,
+  markUndo,
+  readState,
+  type PetBackupRecord,
+  updateStateAfterSwitch,
+} from './io/state.js'
 import { playHatchHype } from './ui/hype.js'
 import { pickIcon, pickText } from './ui/output-mode.js'
 import { formatFilters, renderBuddyCard, renderDoctorMessage } from './ui/render.js'
@@ -43,6 +53,14 @@ type SwitchCommandOptions = {
 type GlobalCliOptions = {
   configPath?: string
   statePath?: string
+}
+
+type BackupSaveOptions = {
+  name?: string
+}
+
+type BackupRestoreOptions = {
+  id: string
 }
 
 function msg(zh: string, en: string): string {
@@ -119,6 +137,97 @@ function readCompanionHatchedAt(companion: unknown): number | undefined {
   }
   const raw = (companion as { hatchedAt?: unknown }).hatchedAt
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
+}
+
+function createBackupId(): string {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).slice(2, 6)
+  return `pet-${timestamp}-${random}`
+}
+
+function backupTimestampToken(isoDate: string): string {
+  return isoDate.replace(/[-:TZ.]/g, '').slice(0, 14)
+}
+
+function petBackupSnapshotPath(statePath: string, backupId: string, createdAt: string): string {
+  return join(getPetBackupDirectory(statePath), `${backupTimestampToken(createdAt)}-${backupId}.json`)
+}
+
+function summarizeUserId(userId: string): string {
+  if (userId.length <= 16) {
+    return userId
+  }
+  return `${userId.slice(0, 8)}...${userId.slice(-6)}`
+}
+
+function renderCurrentBuddyCard(paths: ResolvedPathOptions): void {
+  const config = readClaudeConfig(paths.configPath)
+  const { userId, source } = resolveEffectiveUserId(config)
+  const roll = rollByUserId(userId)
+  const signature = extractCompanionSignature(config.companion)
+  const possibleSoulMismatch =
+    Boolean(signature.rarity && signature.rarity !== roll.bones.rarity) ||
+    Boolean(signature.species && signature.species !== roll.bones.species)
+
+  process.stdout.write(chalk.bold(`${msg('=== 当前宠物 ===', '=== Current Buddy ===')}\n`))
+  process.stdout.write(`${msg('种子来源', 'Seed source')}: ${source}\n`)
+  process.stdout.write(`${msg('哈希模式', 'Hash mode')}: ${hashModeLabel()}\n`)
+  process.stdout.write(
+    `${msg('种子值', 'Seed value')}: ${source === 'accountUuid' ? chalk.yellow(userId) : chalk.green(userId)}\n\n`,
+  )
+  process.stdout.write(chalk.bold(`${msg('=== companion（当前配置，soul）===', '=== companion (config, soul) ===')}\n`))
+  process.stdout.write(`${msg('名称', 'Name')}: ${signature.name ?? msg('未设置', 'unset')}\n`)
+  process.stdout.write(`${msg('解析来源', 'Parsed from')}: ${signature.source}\n`)
+  if (signature.personality) {
+    process.stdout.write(`${msg('个性', 'Personality')}: ${signature.personality}\n`)
+  }
+  if (signature.rarity && signature.species) {
+    process.stdout.write(
+      `${msg('个性推断', 'Soul hint')}: ${pickText(RARITY_ZH[signature.rarity], signature.rarity)} / ${pickText(SPECIES_ZH[signature.species], signature.species)} ${msg('（仅供参考）', '(for reference)')}\n`,
+    )
+  }
+  process.stdout.write('\n')
+  process.stdout.write(chalk.bold(`${msg('=== 种子推演骨架 ===', '=== Seed-derived Bones ===')}\n`))
+  process.stdout.write(`${renderBuddyCard(roll.bones)}\n`)
+
+  if (!signature.name || !signature.personality) {
+    process.stdout.write(msg('配置状态：⚠️ 当前 companion soul 不完整，可执行 random/target 重新同步。\n', 'Config status: [WARN] companion soul incomplete; run random/target to sync.\n'))
+  } else if (possibleSoulMismatch) {
+    process.stdout.write(
+      msg('配置状态：⚠️ companion soul 与当前种子推演可能不一致（常见于旧算法遗留），建议执行 random/target 同步。\n', 'Config status: [WARN] companion soul may mismatch current seed-derived bones (often legacy hash output); run random/target to sync.\n'),
+    )
+  } else {
+    process.stdout.write(msg('配置状态：✅ companion soul 已就绪（骨架以种子推演结果为准）。\n', 'Config status: [OK] companion soul ready (bones derived from seed).\n'))
+  }
+}
+
+function createPetBackupRecord(
+  paths: ResolvedPathOptions,
+  options?: BackupSaveOptions,
+): PetBackupRecord {
+  const config = readClaudeConfig(paths.configPath)
+  const { userId } = resolveEffectiveUserId(config)
+  const roll = rollByUserId(userId)
+  const signature = extractCompanionSignature(config.companion)
+  const createdAt = new Date().toISOString()
+  const id = createBackupId()
+  const snapshotPath = petBackupSnapshotPath(paths.statePath, id, createdAt)
+  const displayName = options?.name?.trim() || undefined
+  backupCurrentConfigToPath(paths.configPath, snapshotPath)
+
+  return {
+    id,
+    createdAt,
+    name: displayName,
+    snapshotPath,
+    summary: {
+      rarity: roll.bones.rarity,
+      species: roll.bones.species,
+      shiny: roll.bones.shiny,
+      userId,
+      name: signature.name,
+    },
+  }
 }
 
 async function executeSwitch(
@@ -291,44 +400,119 @@ async function main(): Promise<void> {
     .description(msg('展示当前宠物卡片', 'show current buddy card'))
     .action(function () {
       const paths = getResolvedPaths(this.optsWithGlobals() as GlobalCliOptions)
-      const config = readClaudeConfig(paths.configPath)
-      const { userId, source } = resolveEffectiveUserId(config)
-      const roll = rollByUserId(userId)
-      const signature = extractCompanionSignature(config.companion)
-      const possibleSoulMismatch =
-        Boolean(signature.rarity && signature.rarity !== roll.bones.rarity) ||
-        Boolean(signature.species && signature.species !== roll.bones.species)
+      renderCurrentBuddyCard(paths)
+    })
 
-      process.stdout.write(chalk.bold(`${msg('=== 当前宠物 ===', '=== Current Buddy ===')}\n`))
-      process.stdout.write(`${msg('种子来源', 'Seed source')}: ${source}\n`)
-      process.stdout.write(`${msg('哈希模式', 'Hash mode')}: ${hashModeLabel()}\n`)
+  const backupCommand = program
+    .command('backup')
+    .description(msg('宠物手动备份池管理', 'manual pet backup pool management'))
+
+  backupCommand
+    .command('save')
+    .description(msg('手动备份当前宠物（完整配置快照）', 'save current pet as full config snapshot'))
+    .option('--name <label>', msg('备份名称（可选）', 'optional backup label'))
+    .action(function (options: BackupSaveOptions) {
+      const paths = getResolvedPaths(this.optsWithGlobals() as GlobalCliOptions)
+      const record = createPetBackupRecord(paths, options)
+      const appended = appendPetBackup(record, paths.statePath)
+
+      process.stdout.write(`${chalk.green(msg(`${pickIcon('✅ ', '')}宠物备份成功`, '[OK] pet backup saved'))}\n`)
+      process.stdout.write(`${msg('备份 ID', 'Backup ID')}: ${record.id}\n`)
+      process.stdout.write(`${msg('创建时间', 'Created at')}: ${record.createdAt}\n`)
+      process.stdout.write(`${msg('备份名称', 'Backup name')}: ${record.name ?? msg('未命名', 'unnamed')}\n`)
+      process.stdout.write(`${msg('快照路径', 'Snapshot path')}: ${record.snapshotPath}\n`)
       process.stdout.write(
-        `${msg('种子值', 'Seed value')}: ${source === 'accountUuid' ? chalk.yellow(userId) : chalk.green(userId)}\n\n`,
+        `${msg('宠物摘要', 'Summary')}: ${pickText(RARITY_ZH[record.summary.rarity], record.summary.rarity)} / ${pickText(SPECIES_ZH[record.summary.species], record.summary.species)} / ${record.summary.shiny ? msg('闪光', 'shiny') : msg('非闪光', 'normal')}\n`,
       )
-      process.stdout.write(chalk.bold(`${msg('=== companion（当前配置，soul）===', '=== companion (config, soul) ===')}\n`))
-      process.stdout.write(`${msg('名称', 'Name')}: ${signature.name ?? msg('未设置', 'unset')}\n`)
-      process.stdout.write(`${msg('解析来源', 'Parsed from')}: ${signature.source}\n`)
-      if (signature.personality) {
-        process.stdout.write(`${msg('个性', 'Personality')}: ${signature.personality}\n`)
-      }
-      if (signature.rarity && signature.species) {
+      process.stdout.write(`${msg('userID 摘要', 'userID summary')}: ${summarizeUserId(record.summary.userId)}\n`)
+      if (appended.evicted.length > 0) {
+        const evictedIds = appended.evicted.map(item => item.id).join(', ')
         process.stdout.write(
-          `${msg('个性推断', 'Soul hint')}: ${pickText(RARITY_ZH[signature.rarity], signature.rarity)} / ${pickText(SPECIES_ZH[signature.species], signature.species)} ${msg('（仅供参考）', '(for reference)')}\n`,
+          `${chalk.yellow(msg(`${pickIcon('⚠️ ', '[WARN] ')}备份池上限为 5，已自动移除最旧备份：${evictedIds}`, `[WARN] backup pool max is 5, oldest backup removed: ${evictedIds}`))}\n`,
         )
+      }
+    })
+
+  backupCommand
+    .command('list')
+    .description(msg('查看宠物备份列表', 'list pet backups'))
+    .action(function () {
+      const paths = getResolvedPaths(this.optsWithGlobals() as GlobalCliOptions)
+      const state = readState(paths.statePath)
+      const backups = state.petBackups
+
+      process.stdout.write(chalk.bold(`${msg('=== 宠物备份列表 ===', '=== Pet Backups ===')}\n`))
+      if (backups.length === 0) {
+        process.stdout.write(msg('当前没有宠物备份，请先执行 backup save。\n', 'No pet backups found. Run backup save first.\n'))
+        return
+      }
+
+      for (const item of backups) {
+        process.stdout.write(`- ID: ${item.id}\n`)
+        process.stdout.write(`  ${msg('时间', 'Time')}: ${item.createdAt}\n`)
+        process.stdout.write(`  ${msg('名称', 'Name')}: ${item.name ?? msg('未命名', 'unnamed')}\n`)
+        process.stdout.write(`  ${msg('物种', 'Species')}: ${pickText(SPECIES_ZH[item.summary.species], item.summary.species)}\n`)
+        process.stdout.write(`  ${msg('稀有度', 'Rarity')}: ${pickText(RARITY_ZH[item.summary.rarity], item.summary.rarity)}\n`)
+        process.stdout.write(`  ${msg('闪光', 'Shiny')}: ${item.summary.shiny ? msg('是', 'yes') : msg('否', 'no')}\n`)
+        process.stdout.write(`  ${msg('userID', 'userID')}: ${summarizeUserId(item.summary.userId)}\n`)
+      }
+      process.stdout.write(`${msg('总数', 'Total')}: ${backups.length}/5\n`)
+    })
+
+  backupCommand
+    .command('restore')
+    .description(msg('按备份 ID 恢复宠物', 'restore pet by backup ID'))
+    .requiredOption('--id <backupId>', msg('备份 ID', 'backup id'))
+    .action(async function (options: BackupRestoreOptions) {
+      const paths = getResolvedPaths(this.optsWithGlobals() as GlobalCliOptions)
+      const state = readState(paths.statePath)
+      const backupId = options.id.trim()
+      if (!backupId) {
+        throw new Error(msg('备份 ID 不能为空', 'backup id cannot be empty'))
+      }
+      const target = state.petBackups.find(item => item.id === backupId)
+      if (!target) {
+        throw new Error(msg(`找不到备份 ID：${backupId}`, `backup id not found: ${backupId}`))
+      }
+      if (!existsSync(target.snapshotPath)) {
+        throw new Error(msg(`备份快照不存在：${target.snapshotPath}`, `backup snapshot missing: ${target.snapshotPath}`))
+      }
+
+      const confirmResult = await confirmSafetyBackup()
+      let undoBackupPath: string | undefined
+      if (confirmResult === 'confirmed') {
+        undoBackupPath = backupCurrentConfigForUndo(paths.configPath)
+        process.stdout.write(
+          `${chalk.gray(`${msg('已创建当前配置保护备份', 'Created safety backup for current config')}: ${undoBackupPath}`)}\n`,
+        )
+      } else if (confirmResult === 'skipped_non_interactive') {
+        process.stdout.write(
+          `${chalk.gray(msg('当前为非交互环境，已跳过“恢复前保护备份”。', 'Non-interactive mode detected; skipped safety backup before restore.'))}\n`,
+        )
+      }
+
+      restoreConfigFromBackup(paths.configPath, target.snapshotPath)
+      markUndo(
+        {
+          timestamp: new Date().toISOString(),
+          restoredFromBackup: target.snapshotPath,
+          undoBackupPath,
+          source: 'pet_backup_restore',
+          backupId: target.id,
+        },
+        paths.statePath,
+      )
+
+      process.stdout.write(`${chalk.green(msg(`${pickIcon('✅ ', '')}已恢复到备份宠物`, '[OK] restored to pet backup'))}\n`)
+      process.stdout.write(`${msg('备份 ID', 'Backup ID')}: ${target.id}\n`)
+      process.stdout.write(`${msg('恢复来源', 'Restored from')}: ${target.snapshotPath}\n`)
+      if (!undoBackupPath) {
+        process.stdout.write(`${msg('当前前置备份', 'Current pre-restore backup')}: ${msg('未创建', 'not created')}\n`)
+      } else {
+        process.stdout.write(`${msg('当前前置备份', 'Current pre-restore backup')}: ${undoBackupPath}\n`)
       }
       process.stdout.write('\n')
-      process.stdout.write(chalk.bold(`${msg('=== 种子推演骨架 ===', '=== Seed-derived Bones ===')}\n`))
-      process.stdout.write(`${renderBuddyCard(roll.bones)}\n`)
-
-      if (!signature.name || !signature.personality) {
-        process.stdout.write(msg('配置状态：⚠️ 当前 companion soul 不完整，可执行 random/target 重新同步。\n', 'Config status: [WARN] companion soul incomplete; run random/target to sync.\n'))
-      } else if (possibleSoulMismatch) {
-        process.stdout.write(
-          msg('配置状态：⚠️ companion soul 与当前种子推演可能不一致（常见于旧算法遗留），建议执行 random/target 同步。\n', 'Config status: [WARN] companion soul may mismatch current seed-derived bones (often legacy hash output); run random/target to sync.\n'),
-        )
-      } else {
-        process.stdout.write(msg('配置状态：✅ companion soul 已就绪（骨架以种子推演结果为准）。\n', 'Config status: [OK] companion soul ready (bones derived from seed).\n'))
-      }
+      renderCurrentBuddyCard(paths)
     })
 
   program
@@ -349,6 +533,7 @@ async function main(): Promise<void> {
           timestamp: new Date().toISOString(),
           restoredFromBackup: state.lastSwitch.backupPath,
           undoBackupPath,
+          source: 'switch_undo',
         },
         paths.statePath,
       )

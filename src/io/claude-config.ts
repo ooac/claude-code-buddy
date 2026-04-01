@@ -148,3 +148,9 @@ export function backupCurrentConfigForUndo(configPath = getClaudeConfigPath()): 
   writeFileSync(backupPath, raw, 'utf8')
   return backupPath
 }
+
+export function backupCurrentConfigToPath(configPath: string, backupPath: string): void {
+  const raw = readRawConfig(configPath)
+  ensureParentDir(backupPath)
+  writeFileSync(backupPath, raw, 'utf8')
+}

@@ -157,15 +157,46 @@ echo.
 
 :loop
 echo.
-set /p ANSWER=Input q to exit, press Enter to draw again: 
+set /p ANSWER=Input q to exit, press Enter to draw again, b save backup, l list backups, r restore by ID: 
 if /I "%ANSWER%"=="q" goto finish
 if /I "%ANSWER%"=="quit" goto finish
 if /I "%ANSWER%"=="exit" goto finish
+if /I "%ANSWER%"=="b" goto backup_save
+if /I "%ANSWER%"=="backup" goto backup_save
+if /I "%ANSWER%"=="l" goto backup_list
+if /I "%ANSWER%"=="list" goto backup_list
+if /I "%ANSWER%"=="r" goto backup_restore
+if /I "%ANSWER%"=="restore" goto backup_restore
 
 echo.
 "%NODE_EXE%" "%CLI_JS%" random
 echo.
 "%NODE_EXE%" "%CLI_JS%" card
+goto loop
+
+:backup_save
+echo.
+set /p BACKUP_NAME=Backup name (optional, press Enter to skip): 
+if "%BACKUP_NAME%"=="" (
+  "%NODE_EXE%" "%CLI_JS%" backup save
+) else (
+  "%NODE_EXE%" "%CLI_JS%" backup save --name "%BACKUP_NAME%"
+)
+goto loop
+
+:backup_list
+echo.
+"%NODE_EXE%" "%CLI_JS%" backup list
+goto loop
+
+:backup_restore
+echo.
+set /p BACKUP_ID=Input backup ID to restore: 
+if "%BACKUP_ID%"=="" (
+  echo [buddy-switch] backup ID is required.
+  goto loop
+)
+"%NODE_EXE%" "%CLI_JS%" backup restore --id "%BACKUP_ID%"
 goto loop
 
 :run_args
@@ -201,6 +232,26 @@ run_cli() {
   "$ROOT_DIR/buddy-switch" "$@"
 }
 
+save_backup() {
+  printf "Backup name (optional): "
+  read -r backup_name
+  if [ -n "${backup_name:-}" ]; then
+    run_cli backup save --name "$backup_name"
+  else
+    run_cli backup save
+  fi
+}
+
+restore_backup_by_id() {
+  printf "Input backup ID to restore: "
+  read -r backup_id
+  if [ -z "${backup_id:-}" ]; then
+    echo "[buddy-switch] backup ID is required."
+    return
+  fi
+  run_cli backup restore --id "$backup_id"
+}
+
 if [ "$#" -eq 0 ]; then
   echo "[buddy-switch] Running default flow: doctor -> prob -> random -> card"
   echo
@@ -215,11 +266,23 @@ if [ "$#" -eq 0 ]; then
   if [ -t 0 ]; then
     while true; do
       echo
-      printf "\\033[37mInput q to exit\\033[0m, \\033[1;33mpress Enter to draw again\\033[0m: "
+      printf "\\033[37mInput q to exit\\033[0m, \\033[1;33mpress Enter to draw again\\033[0m, \\033[1;36mb save backup\\033[0m, \\033[1;34ml list backups\\033[0m, \\033[1;35mr restore by ID\\033[0m: "
       read -r answer
       case "$answer" in
         q|Q|quit|QUIT|exit|EXIT)
           exit 0
+          ;;
+        b|B|backup|BACKUP)
+          echo
+          save_backup
+          ;;
+        l|L|list|LIST)
+          echo
+          run_cli backup list
+          ;;
+        r|R|restore|RESTORE)
+          echo
+          restore_backup_by_id
           ;;
         *)
           echo
@@ -305,6 +368,7 @@ async function main() {
   console.log(`[portable] 使用 Node Runtime 版本: v${runtimeVersion}`)
   console.log(`[portable] 目标平台: ${targets.join(', ')}`)
 
+  rmSync(join(ROOT, 'dist'), { recursive: true, force: true })
   run('npm', ['run', 'build'])
 
   ensureCleanDir(RELEASE_DIR)
