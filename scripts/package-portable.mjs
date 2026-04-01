@@ -157,7 +157,8 @@ echo.
 
 :loop
 echo.
-set /p ANSWER=Input q to exit, press Enter to draw again, b save backup, l list backups, r restore by ID: 
+echo Shortcuts: b save backup ^| l list backups ^| r restore by ID
+set /p ANSWER=Input q to exit, press Enter to draw again: 
 if /I "%ANSWER%"=="q" goto finish
 if /I "%ANSWER%"=="quit" goto finish
 if /I "%ANSWER%"=="exit" goto finish
@@ -266,7 +267,8 @@ if [ "$#" -eq 0 ]; then
   if [ -t 0 ]; then
     while true; do
       echo
-      printf "\\033[37mInput q to exit\\033[0m, \\033[1;33mpress Enter to draw again\\033[0m, \\033[1;36mb save backup\\033[0m, \\033[1;34ml list backups\\033[0m, \\033[1;35mr restore by ID\\033[0m: "
+      printf "\\033[1;36mShortcuts: b save backup | l list backups | r restore by ID\\033[0m\\n"
+      printf "\\033[37mInput q to exit\\033[0m, \\033[1;33mpress Enter to draw again\\033[0m: "
       read -r answer
       case "$answer" in
         q|Q|quit|QUIT|exit|EXIT)

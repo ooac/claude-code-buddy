@@ -69,7 +69,8 @@ if [ "$#" -eq 0 ]; then
   if [ -t 0 ]; then
     while true; do
       echo
-      printf "\033[37m输入 q 退出\033[0m，\033[1;33m回车继续抽卡\033[0m，\033[1;36mb 备份当前\033[0m，\033[1;34ml 查看备份\033[0m，\033[1;35mr 按ID恢复\033[0m: "
+      printf "\033[1;36m快捷键：b 备份当前 | l 查看备份 | r 按ID恢复\033[0m\n"
+      printf "\033[37m输入 q 退出\033[0m，\033[1;33m回车继续抽卡\033[0m: "
       read -r answer
       case "$answer" in
         q|Q|quit|QUIT|exit|EXIT)

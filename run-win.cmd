@@ -28,7 +28,8 @@ echo.
 
 :loop
 echo.
-set /p ANSWER=Input q to exit, press Enter to draw again, b save backup, l list backups, r restore by ID: 
+echo Shortcuts: b save backup ^| l list backups ^| r restore by ID
+set /p ANSWER=Input q to exit, press Enter to draw again: 
 if /I "%ANSWER%"=="q" goto finish
 if /I "%ANSWER%"=="quit" goto finish
 if /I "%ANSWER%"=="exit" goto finish
